@@ -67,6 +67,54 @@ public class TestSearchPattern
         AssertEx.AreEqual(match, search.Match(pathToSearchInfo));
     }
 
+    [TestMethod]
+    // Search globs should match case-insensitively when isCaseSensitive is false.
+    [DataRow("/a/b/c", "X.TXT", "x.txt", true)]
+    [DataRow("/a/b/c", "x.txt", "x.txt1", false)]
+    [DataRow("/a/b/c", "*.TXT", "x.txt", true)]
+    [DataRow("/a/b/c", "X?Z", "xyz", true)]
+    [DataRow("/a/b/c", "d/*.TXT", "x.txt", true)]
+    [DataRow("/a/b/c", "*.TXT", "x.txt1", false)]
+    public void TestMatchOrdinalIgnoreCase(string path, string searchPattern, string pathToSearch, bool match)
+    {
+        var pathInfo = new UPath(path);
+        var search = SearchPattern.Parse(ref pathInfo, ref searchPattern, isCaseSensitive: false);
+        AssertEx.AreEqual(match, search.Match(new UPath(pathToSearch)));
+    }
+
+    [TestMethod]
+    // Parse without isCaseSensitive should stay case-sensitive.
+    [DataRow("/a/b/c", "X.TXT", "x.txt", false)]
+    [DataRow("/a/b/c", "*.TXT", "x.txt", false)]
+    public void TestMatchIsCaseSensitiveByDefault(string path, string searchPattern, string pathToSearch, bool match)
+    {
+        var pathInfo = new UPath(path);
+        var search = SearchPattern.Parse(ref pathInfo, ref searchPattern);
+        AssertEx.AreEqual(match, search.Match(new UPath(pathToSearch)));
+    }
+
+    [TestMethod]
+    // The span overload has its own exact-match comparison and should also ignore case when isCaseSensitive is false.
+    [DataRow("X.TXT", "x.txt", true)]
+    [DataRow("*.TXT", "x.txt", true)]
+    [DataRow("X.TXT", "y.txt", false)]
+    public void TestMatchSpanOrdinalIgnoreCase(string searchPattern, string name, bool match)
+    {
+        var path = new UPath("/a");
+        var search = SearchPattern.Parse(ref path, ref searchPattern, isCaseSensitive: false);
+        AssertEx.AreEqual(match, search.Match(name.AsSpan()));
+    }
+
+    [TestMethod]
+    // The span overload should stay case-sensitive when parsed without isCaseSensitive.
+    [DataRow("X.TXT", "x.txt", false)]
+    [DataRow("X.TXT", "X.TXT", true)]
+    public void TestMatchSpanIsCaseSensitiveByDefault(string searchPattern, string name, bool match)
+    {
+        var path = new UPath("/a");
+        var search = SearchPattern.Parse(ref path, ref searchPattern);
+        AssertEx.AreEqual(match, search.Match(name.AsSpan()));
+    }
 
     [TestMethod]
     public void TestExpectedExceptions()

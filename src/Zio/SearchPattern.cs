@@ -10,7 +10,7 @@ namespace Zio;
 
 /// <summary>
 /// Search pattern compiler used for custom <see cref="IFileSystem.EnumeratePaths"/> implementations.
-/// Use the method <see cref="Parse"/> to create a pattern.
+/// Use the method <see cref="Parse(ref UPath, ref string)"/> to create a pattern.
 /// </summary>
 public struct SearchPattern
 {
@@ -18,6 +18,8 @@ public struct SearchPattern
 
     private readonly string? _exactMatch;
     private readonly Regex? _regexMatch;
+
+    private readonly StringComparison _comparisonType;
 
     /// <summary>
     /// Tries to match the specified path with this instance.
@@ -29,7 +31,7 @@ public struct SearchPattern
         path.AssertNotNull();
         var name = path.GetName();
         // if _execMatch is null and _regexMatch is null, we have a * match
-        return _exactMatch != null ? _exactMatch == name : _regexMatch is null || _regexMatch.IsMatch(name);
+        return _exactMatch != null ? string.Equals(_exactMatch, name, _comparisonType) : _regexMatch is null || _regexMatch.IsMatch(name);
     }
 
     /// <summary>
@@ -41,7 +43,7 @@ public struct SearchPattern
     {
         if (name is null) throw new ArgumentNullException(nameof(name));
         // if _execMatch is null and _regexMatch is null, we have a * match
-        return _exactMatch != null ? _exactMatch == name : _regexMatch is null || _regexMatch.IsMatch(name);
+        return _exactMatch != null ? string.Equals(_exactMatch, name, _comparisonType) : _regexMatch is null || _regexMatch.IsMatch(name);
     }
 
     /// <summary>
@@ -53,7 +55,7 @@ public struct SearchPattern
     {
 #if NET
         // if _execMatch is null and _regexMatch is null, we have a * match
-        return _exactMatch != null ? name.SequenceEqual(_exactMatch) : _regexMatch is null || _regexMatch.IsMatch(name);
+        return _exactMatch != null ? name.Equals(_exactMatch, _comparisonType) : _regexMatch is null || _regexMatch.IsMatch(name);
 #else
         // Regex.Match(ReadOnlySpan<char>) is only available starting from .NET
         return Match(name.ToString());
@@ -68,7 +70,19 @@ public struct SearchPattern
     /// <returns>An instance of <see cref="SearchPattern"/> in order to use <see cref="Match(Zio.UPath)"/> on a path.</returns>
     public static SearchPattern Parse(ref UPath path, ref string searchPattern)
     {
-        return new SearchPattern(ref path, ref searchPattern);
+        return Parse(ref path, ref searchPattern, true);
+    }
+
+    /// <summary>
+    /// Parses and normalize the specified path and <see cref="SearchPattern"/>.
+    /// </summary>
+    /// <param name="path">The path.</param>
+    /// <param name="searchPattern">The search pattern.</param>
+    /// <param name="isCaseSensitive">Specifies if names should be matched case-sensitively.</param>
+    /// <returns>An instance of <see cref="SearchPattern"/> in order to use <see cref="Match(Zio.UPath)"/> on a path.</returns>
+    public static SearchPattern Parse(ref UPath path, ref string searchPattern, bool isCaseSensitive)
+    {
+        return new SearchPattern(ref path, ref searchPattern, isCaseSensitive);
     }
 
     /// <summary>
@@ -81,13 +95,14 @@ public struct SearchPattern
         Parse(ref path, ref searchPattern);
     }
 
-    private SearchPattern(ref UPath path, ref string searchPattern)
+    private SearchPattern(ref UPath path, ref string searchPattern, bool isCaseSensitive)
     {
         path.AssertAbsolute();
         if (searchPattern is null) throw new ArgumentNullException(nameof(searchPattern));
 
         _exactMatch = null;
         _regexMatch = null;
+        _comparisonType = isCaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
         // Optimized path, most common case
         if (searchPattern is "*")
@@ -162,7 +177,9 @@ public struct SearchPattern
                 builder.Append("$");
 
                 var regexPattern = builder.ToString();
-                _regexMatch = new Regex(regexPattern);
+                _regexMatch = isCaseSensitive
+                    ? new Regex(regexPattern)
+                    : new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             }
         }
         finally
