@@ -9,7 +9,7 @@ namespace Zio;
 
 /// <summary>
 /// Filter pattern compiler used for <see cref="Zio.IFileSystemWatcher"/> implementation.
-/// Use the method <see cref="Parse"/> to create a pattern.
+/// Use the method <see cref="Parse(string)"/> to create a pattern.
 /// </summary>
 public readonly struct FilterPattern
 {
@@ -18,9 +18,24 @@ public readonly struct FilterPattern
     private readonly string? _exactMatch;
     private readonly Regex? _regexMatch;
 
+    private readonly StringComparison _comparisonType;
+
     public static FilterPattern Parse(string filter)
     {
-        return new FilterPattern(filter);
+        return Parse(filter, true);
+    }
+
+    /// <summary>
+    /// Parses the specified filter (e.g. <c>*.txt</c>) to match file names by pattern.
+    /// </summary>
+    /// <param name="filter">The filter to parse (e.g. <c>*.txt</c>).</param>
+    /// <param name="isCaseSensitive">Specifies if file names should be matched case-sensitively.</param>
+    /// <returns>A <see cref="FilterPattern"/> instance in order to use <see cref="Match(string)"/> on a file name.</returns>
+    /// <exception cref="ArgumentNullException"></exception>
+    /// <exception cref="ArgumentException"></exception>
+    public static FilterPattern Parse(string filter, bool isCaseSensitive)
+    {
+        return new FilterPattern(filter, isCaseSensitive);
     }
     
     /// <summary>
@@ -33,7 +48,7 @@ public readonly struct FilterPattern
         path.AssertNotNull();
         var name = path.GetName();
         // if _execMatch is null and _regexMatch is null, we have a * match
-        return _exactMatch != null ? _exactMatch == name : _regexMatch is null || _regexMatch.IsMatch(name);
+        return _exactMatch != null ? string.Equals(_exactMatch, name, _comparisonType) : _regexMatch is null || _regexMatch.IsMatch(name);
     }
 
     /// <summary>
@@ -45,10 +60,22 @@ public readonly struct FilterPattern
     {
         if (fileName is null) throw new ArgumentNullException(nameof(fileName));
         // if _execMatch is null and _regexMatch is null, we have a * match
-        return _exactMatch != null ? _exactMatch == fileName : _regexMatch is null || _regexMatch.IsMatch(fileName);
+        return _exactMatch != null ? string.Equals(_exactMatch, fileName, _comparisonType) : _regexMatch is null || _regexMatch.IsMatch(fileName);
     }
 
     public FilterPattern(string filter)
+    : this(filter, true)
+    {
+    }
+
+    /// <summary>
+    /// Initializes an instance of the filter pattern struct from a specified filter (e.g. <c>*.txt</c>).
+    /// </summary>
+    /// <param name="filter">The filter to parse (e.g. <c>*.txt</c>).</param>
+    /// <param name="isCaseSensitive">Specifies if file names should be matched case-sensitively.</param>
+    /// <exception cref="ArgumentNullException"></exception>
+    /// <exception cref="ArgumentException"></exception>
+    public FilterPattern(string filter, bool isCaseSensitive)
     {
         if (filter is null)
         {
@@ -62,6 +89,7 @@ public readonly struct FilterPattern
 
         _exactMatch = null;
         _regexMatch = null;
+        _comparisonType = isCaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
         // Optimized path, most common cases
         if (filter is "" or "*" or "*.*")
@@ -129,7 +157,9 @@ public readonly struct FilterPattern
                 builder.Append("$");
 
                 var regexPattern = builder.ToString();
-                _regexMatch = new Regex(regexPattern);
+                _regexMatch = isCaseSensitive
+                    ? new Regex(regexPattern)
+                    : new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             }
         }
         finally

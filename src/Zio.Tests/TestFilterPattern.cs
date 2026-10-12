@@ -45,17 +45,27 @@ public class TestFilterPattern
 
     [TestMethod]
     // Filter globs should match case-insensitively (sbox.txt should match Sbox.txt / sbox.TXT / SBOX.txt).
-    // Skipped: FilterPattern is currently case-sensitive. Remove the Skip once a follow-up PR adds
-    // case-insensitive matching, and this should pass.
-    [DataRow("Sbox.txt", "sbox.txt")]
-    [DataRow("sbox.TXT", "sbox.txt")]
-    [DataRow("SBOX.txt", "sbox.txt")]
-    public void TestMatchOrdinalIgnoreCase(string fileName, string filterPattern)
+    [DataRow("Sbox.txt", "sbox.txt", true)]
+    [DataRow("sbox.TXT", "sbox.txt", true)]
+    [DataRow("SBOX.txt", "sbox.txt", true)]
+    [DataRow("README", "readme", true)]
+    [DataRow("READ", "readme", false)]
+    [DataRow("SBOX.TXT", "*B?x.txt", true)]
+    [DataRow("test.old.TXT", "TEST.*", false)]
+    public void TestMatchOrdinalIgnoreCase(string fileName, string filterPattern, bool match)
     {
-        Skip.If(true, "FilterPattern case-insensitive matching pending a follow-up PR.");
+        var filter = FilterPattern.Parse(filterPattern, isCaseSensitive: false);
+        AssertEx.AreEqual(match, filter.Match(fileName));
+    }
 
+    [TestMethod]
+    // Parse without isCaseSensitive should stay case-sensitive.
+    [DataRow("SBOX.TXT", "sbox.txt", false)]
+    [DataRow("README", "readme", false)]
+    public void TestMatchIsCaseSensitiveByDefault(string fileName, string filterPattern, bool match)
+    {
         var filter = FilterPattern.Parse(filterPattern);
-        Assert.IsTrue(filter.Match(fileName));
+        AssertEx.AreEqual(match, filter.Match(fileName));
     }
 }
 
